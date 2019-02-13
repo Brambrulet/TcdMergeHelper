@@ -2,6 +2,7 @@ package utils;
 
 import consts.RcItemType;
 import dto.RcItem;
+import jdk.nashorn.internal.objects.annotations.Function;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -42,6 +43,7 @@ public class RcFile extends AbstractFile {
     private List<RcItem> cursors;
     private List<RcItem> controls;
     private List<RcItem> waves;
+    private Map<String, RcItem> index;
 
     public RcFile() {
         super(RC_FILE_NAME);
@@ -70,6 +72,8 @@ public class RcFile extends AbstractFile {
         cursors = new ArrayList<>();
         controls = new ArrayList<>();
         waves = new ArrayList<>();
+
+        index = new HashMap<>();
     }
 
     protected void onReadLine(String line, String[] words) {
@@ -116,18 +120,25 @@ public class RcFile extends AbstractFile {
         return words.length > 2 && ENDIF_MACRO.equals(words[0]) && "resources".equals(words[words.length - 1]) && words[words.length - 2].endsWith("Russian");
     }
 
+    private void addItem(String id, RcItemType type, List<RcItem> destination){
+        if(!index.containsKey(id)){
+            RcItem item = new RcItem(id, type);
+
+            index.put(id, item);
+            destination.add(item);
+            items.add(item);
+        }
+    }
+
     private boolean readWave(String line, String[] words) {
-        if (!isHeader &&
+        boolean isWave = !isHeader &&
                 words.length > 2 &&
                 WAVE.equals(words[1]) &&
-                words[1].startsWith("IDR_")) {
-            RcItem item = new RcItem();
+                words[1].startsWith("IDR_");
 
-            item.id = words[1];
-            item.type = RcItemType.WAVE;
-
-            waves.add(item);
-            items.add(item);
+        if (isWave) {
+            String id = words[1];
+            addItem(id, RcItemType.WAVE, waves);
 
             return true;
         } else
@@ -135,17 +146,14 @@ public class RcFile extends AbstractFile {
     }
 
     private boolean readBitmap(String line, String[] words) {
-        if (!isHeader &&
+        boolean isBitmap = !isHeader &&
                 words.length > 2 &&
                 BITMAP.equals(words[1]) &&
-                words[1].startsWith("IDB_")) {
-            RcItem item = new RcItem();
+                words[1].startsWith("IDB_");
 
-            item.id = words[1];
-            item.type = RcItemType.BITMAP;
-
-            bitmaps.add(item);
-            items.add(item);
+        if (isBitmap) {
+            String id = words[1];
+            addItem(id, RcItemType.BITMAP, bitmaps);
 
             return true;
         }
@@ -174,21 +182,48 @@ public class RcFile extends AbstractFile {
     }
 
     private boolean readControl(String line, String[] words) {
-        if (!isHeader &&
+//        return readItem(line, words, RcItemType.CONTROL, (l, w) -> {extracControlId(w[1]);}, (l, w) -> {return !isHeader &&
+//                nesting == 1 &&
+//                section == RcItemType.DIALOG &&
+//                waitEnd &&
+//                (w[1].startsWith("IDC_") || w[1].indexOf(",IDC_") > -1);});
+
+        boolean isControl = !isHeader &&
                 nesting == 1 &&
                 section == RcItemType.DIALOG &&
                 waitEnd &&
-                (words[1].startsWith("IDC_") || words[1].indexOf(",IDC_") > -1)) {
+                (words[1].startsWith("IDC_") || words[1].indexOf(",IDC_") > -1);
 
-            RcItem item = new RcItem();
+        if (isControl) {
+            String id = extractControlId(words[1]);
 
-            item.id = extracControlId(words[1]);
-            item.type = RcItemType.CONTROL;
+            if (id.isEmpty()) {
+                return false;
+            } else {
+                addItem(id, RcItemType.CONTROL, controls);
+                return true;
+            }
+        } else
+            return false;
+    }
+
+    private interface IsRightString{
+        boolean check(String line, String[] words);
+    }
+
+    private interface NameExtractor{
+        String extract(String line, String[] words);
+    }
+
+    private boolean readItem(String line, String[] words, RcItemType type, List<RcItem> destination, NameExtractor nameExtractor, IsRightString checker){
+        if (checker.check(line, words)) {
+            String id = nameExtractor.extract(line, words);
+            RcItem item = new RcItem(id, type);
 
             if (item.id.isEmpty()) {
                 return false;
             } else {
-                controls.add(item);
+                destination.add(item);
                 items.add(item);
 
                 return true;
@@ -197,7 +232,7 @@ public class RcFile extends AbstractFile {
             return false;
     }
 
-    private String extracControlId(String src) {
+    private String extractControlId(String src) {
         String[] words = src.split(",");
 
         for (String word : words) {
@@ -218,13 +253,8 @@ public class RcFile extends AbstractFile {
             section = RcItemType.DIALOG;
             isHeader = false;
 
-            RcItem item = new RcItem();
-
-            item.id = words[1];
-            item.type = RcItemType.DIALOG;
-
-            dialogs.add(item);
-            items.add(item);
+            String id = words[1];
+            addItem(id, RcItemType.DIALOG, dialogs);
 
             return true;
         } else
@@ -286,8 +316,8 @@ public class RcFile extends AbstractFile {
 
         List<RcItem> hItems = resourceH.getItems();
 
-        for (RcItem item: hItems) {
-            if(isBitmapItem(item)){
+        for (RcItem item : hItems) {
+            if (isBitmapItem(item)) {
                 index.put(Integer.toString(item.value), item.id);
             }
         }
@@ -296,10 +326,10 @@ public class RcFile extends AbstractFile {
             String line = lines.get(i);
             String[] words = line.trim().split("\\s+");
 
-            if(words.length > 1 && CONTROL.equals(words[0]) && words[1].indexOf(",\"Static\",SS_BITMAP") > -1){
+            if (words.length > 1 && CONTROL.equals(words[0]) && words[1].contains(",\"Static\",SS_BITMAP")) {
                 String id = words[1].split(",")[0];
 
-                if(index.containsKey(id)){
+                if (index.containsKey(id)) {
                     line = line.replaceFirst("\\s+CONTROL\\s+" + id, "    CONTROL         " + index.get(id));
                     lines.set(i, line);
                 }
