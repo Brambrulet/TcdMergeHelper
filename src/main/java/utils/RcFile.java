@@ -287,7 +287,7 @@ public class RcFile extends AbstractFile {
         List<RcItem> hItems = resourceH.getItems();
 
         for (RcItem item: hItems) {
-            if(!isControlItem(item)){
+            if(isBitmapItem(item)){
                 index.put(Integer.toString(item.value), item.id);
             }
         }
@@ -300,7 +300,7 @@ public class RcFile extends AbstractFile {
                 String id = words[1].split(",")[0];
 
                 if(index.containsKey(id)){
-                    line = line.replaceFirst("\\s+CONTROL\\s+" + id, "    CONTROL " + index.get(id));
+                    line = line.replaceFirst("\\s+CONTROL\\s+" + id, "    CONTROL         " + index.get(id));
                     lines.set(i, line);
                 }
             }

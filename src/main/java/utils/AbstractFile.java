@@ -109,6 +109,11 @@ public abstract class AbstractFile {
                 (item.type == RcItemType.UNKNOWN && item.id.startsWith("IDC_"));
     }
 
+    public static boolean isBitmapItem(RcItem item) {
+        return item.type == RcItemType.BITMAP ||
+                (item.type == RcItemType.UNKNOWN && item.id.startsWith("IDB_"));
+    }
+
     public List<RcItem> getItems() {
         return copyOf(items);
     }
